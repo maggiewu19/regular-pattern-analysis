@@ -1,9 +1,7 @@
 from utility import *
 
 ### Repo #### 
-root = '/Users/maggiewu/Documents/Research/'
-src = root + 'Test/Frames/'
-dst = root + 'Test/Clean_Output/'
+root = '/Users/maggiewu/Documents/Post_MEng_Research/'
 info_dir = root + 'Maze_Info/'
 camera_matrix = np.load(info_dir + 'camera_matrix.npy')
 

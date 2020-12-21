@@ -2,7 +2,7 @@ from utility import *
 from detect_feature import *
 from find_homography import * 
 
-root = '/Users/maggiewu/Documents/Research/'
+root = '/Users/maggiewu/Documents/Post_MEng_Research/'
 info_dir = root + 'Maze_Info/'
 pixelInfo = load_json(info_dir + 'corner_pixels_info.json')
 

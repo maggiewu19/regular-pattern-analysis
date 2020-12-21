@@ -1,6 +1,6 @@
 from utility import *
 
-root = '/Users/maggiewu/Documents/Research/'
+root = '/Users/maggiewu/Documents/Post_MEng_Research/'
 info_dir = root + 'Maze_Info/'
 extensionInfo = load_json(info_dir + 'extended_corner_info.json')
 sectionInfo = load_json(info_dir + 'section_info.json')

@@ -4,13 +4,13 @@ from detect_feature import *
 from find_homography import * 
 from post_processing import *
 
-root = '/Users/maggiewu/Documents/Research/'
-src = root + 'Processing/Frames/'
-cdst = root + 'Processing/Corners/'
-hdst = root + 'Processing/Homography/'
-ddst = root + 'Pickles/'
+root = '/Users/maggiewu/Documents/Post_MEng_Research/'
+src = root + 'Data/Frames/'
+cdst = root + 'Data/Corners/'
+hdst = root + 'Data/Homography/'
+ddst = root + 'Logging/'
 
-def preprocess(image, low, high, frame_data):
+def preprocess(image, frame, low, high, frame_data):
     '''
     Image rectification via hough transform 
     Unit estimation based on hough lines 
@@ -22,13 +22,20 @@ def preprocess(image, low, high, frame_data):
             mask (np.array)
             unit (float)
     '''
-    lines, n = find_lines(image.astype(np.int16))
-    hx, hy, vx, vy, hdismiss, vdismiss = find_vanishing(image, lines, n)
-    unit = find_unit(lines, n, hdismiss, vdismiss)
+    try: 
+        lines, n = find_lines(image.astype(np.int16))
+        hx, hy, vx, vy, hdismiss, vdismiss = find_vanishing(image, lines, n)
+        unit = find_unit(lines, n, hdismiss, vdismiss)
+    except: 
+        print ('frame {} requires interpolation'.format(frame))
+        hx, hy, vx, vy = frame_data['vanishing']
+        unit = frame_data['unit']
+
     image = rectify(image, hx, hy, vx, vy)
     mask = get_mask(image, low, high)
 
     frame_data['vanishing'] = [hx, hy, vx, vy]
+    frame_data['unit'] = unit 
 
     return image, mask, unit 
 
@@ -105,7 +112,7 @@ def pipeline(frame, image, low, high, frame_data, show=False, save=True, logging
 
 def main():
     frameRange = range(0, 920)
-    frame_data = {'vanishing': None, 'identities': dict(), 'homography': None}
+    frame_data = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
 
     for frame in frameRange:
         fname = src + 'frame{}.png'.format(frame)
