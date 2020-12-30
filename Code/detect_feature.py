@@ -217,7 +217,7 @@ def extend_identities(image, neighborInfo, identities, takenCorners, minScore=2)
 
     return identities, takenCorners, moreIdentities
 
-def distance_check(unit, identities, takenCorners):
+def distance_check(unit, identities, takenCorners, count=0, maxCount=10):
     # check corner identity via distant neighbor 
     scores = dict()
     regionDistance = 1.5*unit
@@ -250,10 +250,11 @@ def distance_check(unit, identities, takenCorners):
         return 
 
     sortedScores = sorted(scores.items(), key=lambda x: x[1])
-    if sortedScores[0][1] < 0: 
+    if sortedScores[0][1] < 0 and count < maxCount: 
         corner = identities[sortedScores[0][0]]
         identities.pop(sortedScores[0][0])
         takenCorners.pop(corner)
-        distance_check(unit, identities, takenCorners)
+        count += 1
+        distance_check(unit, identities, takenCorners, count)
 
     return 
