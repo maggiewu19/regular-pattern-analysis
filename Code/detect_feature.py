@@ -140,13 +140,13 @@ def identify_matches(neighborInfo, cornerMatching):
     
     return cornerMatching 
 
-def label_corners(image, identities, color, fontScale=0.5, cornerLabels=None):
+def label_corners(image, identities, color, fontScale=0.5, cornerLabels=None, remove=False):
     if cornerLabels == None: cornerLabels = set()
     for x,y in identities: 
         if (x,y) not in cornerLabels: 
             corner = identities[(x,y)]
             cv2.putText(image, str(corner), org=(x-3*len(str(corner)), y-3), fontFace=cv2.FONT_HERSHEY_PLAIN, color=color, fontScale=fontScale)
-            cornerLabels.add((x,y))
+            if not remove: cornerLabels.add((x,y))
 
     return cornerLabels
 

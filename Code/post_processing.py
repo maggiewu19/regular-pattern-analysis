@@ -59,3 +59,23 @@ def template_match(image, unit, corners, identities, cornerLabels, homography):
     cornerLabels = label_corners(image, identities, (150,150,0), cornerLabels=cornerLabels)
 
     return identities, cornerLabels 
+
+def remove_identities(image, unit, identities, homography):
+    distance = 0.5*unit
+    newIdentities = dict()
+    newCornerLabels = set()
+
+    for x,y in identities: 
+        corner = identities[(x,y)]
+        groundX, groundY = pixelInfo[corner] 
+        imageX, imageY = transform_coord(groundX, groundY, np.linalg.inv(homography))
+
+        if euclidean(imageX, imageY, x, y) <= distance: 
+            newIdentities[(x,y)] = corner 
+            newCornerLabels.add((x,y))
+    
+    label_corners(image, identities, (0,0,0), cornerLabels=newCornerLabels)
+
+    return newIdentities, newCornerLabels
+
+

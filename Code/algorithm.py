@@ -24,7 +24,7 @@ def preprocess(image, frame, low, high, frame_data, prev_inter=False, fast=False
             mask (np.array)
             unit (float)
     '''
-    if not fast: 
+    def run():
         try: 
             lines, n = find_lines(image.astype(np.int16))
             hx, hy, vx, vy, hdismiss, vdismiss = find_vanishing(image, lines, n)
@@ -35,18 +35,14 @@ def preprocess(image, frame, low, high, frame_data, prev_inter=False, fast=False
             hx, hy, vx, vy = frame_data['vanishing']
             unit = frame_data['unit']
             prev_inter = True 
+        
+        return hx, hy, vx, vy, unit, prev_inter 
+
+    if not fast: 
+        hx, hy, vx, vy, unit, prev_inter = run()
     else: 
         if frame % 10 == 0 or prev_inter: 
-            try: 
-                lines, n = find_lines(image.astype(np.int16))
-                hx, hy, vx, vy, hdismiss, vdismiss = find_vanishing(image, lines, n)
-                unit = find_unit(lines, n, hdismiss, vdismiss)
-                prev_inter = False 
-            except: 
-                print ('frame {} requires interpolation'.format(frame))
-                hx, hy, vx, vy = frame_data['vanishing']
-                unit = frame_data['unit']
-                prev_inter = True 
+            hx, hy, vx, vy, unit, prev_inter = run()
         else: 
             hx, hy, vx, vy = frame_data['vanishing']
             unit = frame_data['unit']
@@ -118,15 +114,19 @@ def pipeline(frame, image, low, high, frame_data, prev_inter=False, fast=False, 
     image, mask, unit, prev_inter = preprocess(image, frame, low, high, frame_data, prev_inter=prev_inter, fast=fast)
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
+
     image, corners, identities, cornerLabels = analyze_region(image, mask, unit)
     analyze_time = time.time() 
     print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
     identities, cornerLabels = temporal_analysis(image, unit, corners, identities, cornerLabels, frame_data)
-    
-    if save: cv2.imwrite(cdst + '{}.jpg'.format(frame), image)
 
     homography = get_homography(identities)
     identities, cornerLabels = template_match(image, unit, corners, identities, cornerLabels, homography)
+    homography = transform(image, identities)[1]
+    identities, cornerLabels = remove_identities(image, unit, identities, homography)
+
+    if save: cv2.imwrite(cdst + '{}.jpg'.format(frame), image)
+
     image, homography, meanDist, errorCount = transform(image, identities)
     homography_time = time.time() 
     print ('Homography Time: {}'.format(homography_time-analyze_time))
@@ -145,10 +145,10 @@ def pipeline(frame, image, low, high, frame_data, prev_inter=False, fast=False, 
     return prev_inter
 
 def main():
-    frameRange = range(40, 920)
+    frameRange = range(800, 920)
     frame_data = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
     prev_inter = True 
-    
+
     for frame in frameRange:
         print (frame)
         fname = src + 'frame{}.png'.format(frame)
