@@ -1,4 +1,5 @@
 from utility import *
+from rectify_image import *
 from detect_feature import *
 from find_homography import * 
 
@@ -6,15 +7,19 @@ root = '/Users/maggiewu/Documents/Post_MEng_Research/'
 info_dir = root + 'Maze_Info/'
 pixelInfo = load_json(info_dir + 'corner_pixels_info.json')
 
-def temporal_analysis(image, unit, corners, identities, cornerLabels, frame_data):
-    if len(frame_data['identities']) == 0: return identities, cornerLabels 
+def sanity_check(identities):
+    return len(identities) > (1/4) * len(pixelInfo)
 
-    homography = get_homography(frame_data['identities'], identities2=identities)
+def temporal_analysis(image, unit, corners, identities, cornerLabels, prevIdentities):
+    if len(prevIdentities) == 0: return identities, cornerLabels 
+
+    homography = get_homography(prevIdentities, identities2=identities)
+    if not isinstance(homography, np.ndarray): return identities, cornerLabels 
     identityCorners = set(identities.values())
     distance = 0.5*unit 
 
-    for x,y in frame_data['identities']: 
-        corner = frame_data['identities'][(x,y)]
+    for x,y in prevIdentities: 
+        corner = prevIdentities[(x,y)]
         if corner not in identityCorners: 
             frameX, frameY = transform_coord(x, y, homography)
             xRange = range(round(frameX-distance), round(frameX+distance))
@@ -74,8 +79,34 @@ def remove_identities(image, unit, identities, homography):
             newIdentities[(x,y)] = corner 
             newCornerLabels.add((x,y))
     
-    label_corners(image, identities, (0,0,0), cornerLabels=newCornerLabels)
+    label_corners(image, identities, (0,0,0), cornerLabels=newCornerLabels, remove=True)
 
     return newIdentities, newCornerLabels
 
+def interpolate(rawImage, frame, frameData):
+    print ('frame {} used previous information'.format(frame))
+    hx, hy, vx, vy = frameData['vanishing']
+    vanishing = [hx, hy, vx, vy]
+    unit = frameData['unit']
+    identities = dict() 
+    homography = frameData['homography']
+    image = rectify(rawImage, hx, hy, vx, vy)
 
+    return image, homography, vanishing, unit, identities
+
+def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData):
+    if sanity_check(identities): 
+        try: 
+            identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
+            identities, cornerLabels = template_match(image, unit, corners, identities, cornerLabels, get_homography(identities))
+            identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
+            homography = get_homography(identities)
+            # meanDist, errorCount = image_error(identities, homography)
+        except: 
+            image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
+    else: 
+        image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
+
+    homographyImage = warp_image(image, homography)
+    
+    return homographyImage, image, vanishing, unit, identities, homography 

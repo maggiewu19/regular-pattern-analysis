@@ -12,7 +12,7 @@ cdst = root + 'Data/Corners/'
 hdst = root + 'Data/Homography/'
 ddst = root + 'Logging/'
 
-def preprocess(image, frame, low, high, frame_data, prev_inter=False, fast=False):
+def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False):
     '''
     Image rectification via hough transform 
     Unit estimation based on hough lines 
@@ -29,32 +29,30 @@ def preprocess(image, frame, low, high, frame_data, prev_inter=False, fast=False
             lines, n = find_lines(image.astype(np.int16))
             hx, hy, vx, vy, hdismiss, vdismiss = find_vanishing(image, lines, n)
             unit = find_unit(lines, n, hdismiss, vdismiss)
-            prev_inter = False 
+            prevInter = False 
         except: 
             print ('frame {} requires interpolation'.format(frame))
-            hx, hy, vx, vy = frame_data['vanishing']
-            unit = frame_data['unit']
-            prev_inter = True 
+            hx, hy, vx, vy = frameData['vanishing']
+            unit = frameData['unit']
+            prevInter = True 
         
-        return hx, hy, vx, vy, unit, prev_inter 
+        return hx, hy, vx, vy, unit, prevInter 
 
     if not fast: 
-        hx, hy, vx, vy, unit, prev_inter = run()
+        hx, hy, vx, vy, unit, prevInter = run()
     else: 
-        if frame % 10 == 0 or prev_inter: 
-            hx, hy, vx, vy, unit, prev_inter = run()
+        if frame % 10 == 0 or prevInter: 
+            hx, hy, vx, vy, unit, prevInter = run()
         else: 
-            hx, hy, vx, vy = frame_data['vanishing']
-            unit = frame_data['unit']
-            prev_inter = False 
+            hx, hy, vx, vy = frameData['vanishing']
+            unit = frameData['unit']
+            prevInter = False 
 
+    vanishing = [hx, hy, vx, vy]
     image = rectify(image, hx, hy, vx, vy)
     mask = get_mask(image, low, high)
 
-    frame_data['vanishing'] = [hx, hy, vx, vy]
-    frame_data['unit'] = unit 
-
-    return image, mask, unit, prev_inter 
+    return image, mask, vanishing, unit, prevInter 
 
 def analyze_region(image, mask, unit, maxCorners=300, epsilon=1e-4, k=5e-2, block=5, maxCount=20):
     '''
@@ -73,29 +71,16 @@ def analyze_region(image, mask, unit, maxCorners=300, epsilon=1e-4, k=5e-2, bloc
     cornerMatching = section_split(minMaxPosition, cornerMatching)
     cornerMatching = identify_matches(neighborInfo, cornerMatching)
 
-    identities, takenCorners, _ = assign_identities(image, cornerMatching) 
+    identities, takenCorners = assign_identities(image, cornerMatching) 
     distance_check(unit, identities, takenCorners) 
     cornerLabels = label_corners(image, identities, (0,0,255))
     
-    moreIdentities = True 
-    count = 0
-    while moreIdentities and count < maxCount: 
-        identities, takenCorners, moreIdentities = extend_identities(image, neighborInfo, identities, takenCorners)
-        distance_check(unit, identities, takenCorners) 
-        cornerLabels = label_corners(image, identities, (0,150,0), cornerLabels=cornerLabels)
-        count += 1 
-    
-    moreIdentities = True
-    count = 0 
-    while moreIdentities and count < maxCount: 
-        identities, takenCorners, moreIdentities = extend_identities(image, neighborInfo, identities, takenCorners, minScore=1)
-        distance_check(unit, identities, takenCorners) 
-        cornerLabels = label_corners(image, identities, (255,0,0), cornerLabels=cornerLabels)
-        count += 1 
+    identities, takenCorners, cornerLabels = iterative_extend(image, unit, neighborInfo, identities, takenCorners, cornerLabels)
+    identities, takenCorners, cornerLabels = iterative_extend(image, unit, neighborInfo, identities, takenCorners, cornerLabels, color=(255,0,0), minScore=1)
 
     return image, corners, identities, cornerLabels 
 
-def transform(image, identities):
+def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData):
     '''
     Perspective transformation via homography mapping 
 
@@ -103,51 +88,47 @@ def transform(image, identities):
             identities (dict) 
     Output: image (np.array)
     '''
-    homography = get_homography(identities)
-    image = warp_image(image, homography)
-    meanDist, errorCount = image_error(identities, homography)
+    homographyImage, image, vanishing, unit, identities, homography = image_transform(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData)
+    
+    frameData['vanishing'] = vanishing
+    frameData['unit'] = unit 
+    frameData['identities'] = identities 
+    frameData['homography'] = homography 
 
-    return image, homography, meanDist, errorCount
+    return homographyImage, image, frameData
 
-def pipeline(frame, image, low, high, frame_data, prev_inter=False, fast=False, show=False, save=True, logging=True):
+def pipeline(frame, image, low, high, frameData, prevInter=False, fast=False, show=False, save=True, logging=True):
+    rawImage = copy.deepcopy(image)
     start_time = time.time() 
-    image, mask, unit, prev_inter = preprocess(image, frame, low, high, frame_data, prev_inter=prev_inter, fast=fast)
+    
+    image, mask, vanishing, unit, prevInter = preprocess(image, frame, low, high, frameData, prevInter=prevInter, fast=fast)
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
 
     image, corners, identities, cornerLabels = analyze_region(image, mask, unit)
+    identities, cornerLabels = temporal_analysis(image, unit, corners, identities, cornerLabels, frameData['identities'])
     analyze_time = time.time() 
     print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
-    identities, cornerLabels = temporal_analysis(image, unit, corners, identities, cornerLabels, frame_data)
 
-    homography = get_homography(identities)
-    identities, cornerLabels = template_match(image, unit, corners, identities, cornerLabels, homography)
-    homography = transform(image, identities)[1]
-    identities, cornerLabels = remove_identities(image, unit, identities, homography)
-
-    if save: cv2.imwrite(cdst + '{}.jpg'.format(frame), image)
-
-    image, homography, meanDist, errorCount = transform(image, identities)
-    homography_time = time.time() 
+    homographyImage, image, frameData = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData) 
+    homography_time = time.time()
     print ('Homography Time: {}'.format(homography_time-analyze_time))
-
-    frame_data['identities'] = identities 
-    frame_data['homography'] = homography 
 
     if show: 
         fig = plt.figure()
         plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         plt.show()
 
-    if save: cv2.imwrite(hdst + '{}.jpg'.format(frame), image)
-    if logging: save_pickle(ddst + '{}.pickle'.format(frame), frame_data)
+    if save: cv2.imwrite(cdst + '{}.jpg'.format(frame), image)
+    if save: cv2.imwrite(hdst + '{}.jpg'.format(frame), homographyImage)
+    if logging: save_pickle(ddst + '{}.pickle'.format(frame), frameData)
 
-    return prev_inter
+    return prevInter
 
 def main():
-    frameRange = range(800, 920)
-    frame_data = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
-    prev_inter = True 
+    frameRange = range(850, 920)
+    frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
+    prevInter = True 
 
     for frame in frameRange:
         print (frame)
@@ -157,6 +138,6 @@ def main():
         if frame == frameRange[0]: 
             low, high = select_region(image)
 
-        prev_inter = pipeline(frame, image, low, high, frame_data, prev_inter=prev_inter, fast=True)
+        prevInter = pipeline(frame, image, low, high, frameData, prevInter=prevInter, fast=True)
 
 main()

@@ -24,9 +24,11 @@ def get_homography(identities, identities2=None):
         actualPoints = np.array(actualPoints)
         expectedPoints = np.array(expectedPoints)
 
-    homography, _ = cv2.findHomography(actualPoints, expectedPoints, method=cv2.LMEDS)
-
-    return homography
+    try: 
+        homography, _ = cv2.findHomography(actualPoints, expectedPoints, method=cv2.LMEDS)
+        return homography
+    except:
+        return None 
 
 def image_error(identities, homography):
     transformedPoints = np.array([transform_coord(x, y, homography) for x,y in identities])

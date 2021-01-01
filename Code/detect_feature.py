@@ -171,7 +171,7 @@ def assign_identities(image, cornerMatching):
                     takenCorners[corner] = [(x,y), matchCount]
                     identities[(x,y)] = corner 
 
-    return identities, takenCorners, moreIdentities 
+    return identities, takenCorners 
 
 def extend_identities(image, neighborInfo, identities, takenCorners, minScore=2):
     # extend corner identity 
@@ -258,3 +258,14 @@ def distance_check(unit, identities, takenCorners, count=0, maxCount=10):
         distance_check(unit, identities, takenCorners, count)
 
     return 
+
+def iterative_extend(image, unit, neighborInfo, identities, takenCorners, cornerLabels, color=(0,150,0), minScore=2, maxCount=20):
+    moreIdentities = True 
+    count = 0
+    while moreIdentities and count < maxCount: 
+        identities, takenCorners, moreIdentities = extend_identities(image, neighborInfo, identities, takenCorners, minScore=minScore)
+        distance_check(unit, identities, takenCorners) 
+        cornerLabels = label_corners(image, identities, color, cornerLabels=cornerLabels)
+        count += 1 
+    
+    return identities, takenCorners, cornerLabels
