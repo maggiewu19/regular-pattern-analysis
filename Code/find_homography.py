@@ -1,8 +1,5 @@
+from directory import *
 from utility import *
-
-root = '/Users/maggiewu/Documents/Post_MEng_Research/'
-info_dir = root + 'Maze_Info/'
-pixelInfo = load_json(info_dir + 'corner_pixels_info.json')
 
 def get_homography(identities, identities2=None):
     if identities2 == None: 

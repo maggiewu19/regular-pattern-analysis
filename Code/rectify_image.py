@@ -1,9 +1,5 @@
+from directory import *
 from utility import *
-
-### Repo #### 
-root = '/Users/maggiewu/Documents/Post_MEng_Research/'
-info_dir = root + 'Maze_Info/'
-camera_matrix = np.load(info_dir + 'camera_matrix.npy')
 
 ### Parameters #### 
 dthreshold = 50.0 

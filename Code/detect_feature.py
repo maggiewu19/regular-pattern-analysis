@@ -1,11 +1,5 @@
+from directory import *
 from utility import *
-
-root = '/Users/maggiewu/Documents/Post_MEng_Research/'
-info_dir = root + 'Maze_Info/'
-extensionInfo = load_json(info_dir + 'extended_corner_info.json')
-sectionInfo = load_json(info_dir + 'section_info.json')
-cornerNeighborInfo = load_json(info_dir + 'neighbor_info.json')
-distanceNeighborInfo = load_json(info_dir + 'distance_neighbor_info.json')
 
 def corner_detection(image, mask, unit, maxCorners=300, epsilon=1e-4, k=5e-2, block=5):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

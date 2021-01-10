@@ -1,3 +1,4 @@
+from directory import *
 from rectify_image import *
 from create_mask import *
 from detect_feature import * 
@@ -5,14 +6,6 @@ from find_homography import *
 from post_processing import *
 
 import time 
-
-root = '/Users/maggiewu/Documents/Post_MEng_Research/'
-subject = 'Lee/'
-src = root + 'Data/{}Frames/'.format(subject)
-cdst = root + 'Data/{}Corners/'.format(subject)
-hdst = root + 'Data/{}Homography/'.format(subject)
-ddst = root + 'Logging/{}Info/'.format(subject)
-idst = root + 'Logging/{}'.format(subject)
 
 def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, interval=5):
     '''
