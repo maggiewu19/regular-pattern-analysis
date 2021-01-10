@@ -7,12 +7,14 @@ from post_processing import *
 import time 
 
 root = '/Users/maggiewu/Documents/Post_MEng_Research/'
-src = root + 'Data/Frames/'
-cdst = root + 'Data/Corners/'
-hdst = root + 'Data/Homography/'
-ddst = root + 'Logging/'
+subject = 'Lee/'
+src = root + 'Data/{}Frames/'.format(subject)
+cdst = root + 'Data/{}Corners/'.format(subject)
+hdst = root + 'Data/{}Homography/'.format(subject)
+ddst = root + 'Logging/{}Info/'.format(subject)
+idst = root + 'Logging/{}'.format(subject)
 
-def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False):
+def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, interval=5):
     '''
     Image rectification via hough transform 
     Unit estimation based on hough lines 
@@ -41,7 +43,7 @@ def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False):
     if not fast: 
         hx, hy, vx, vy, unit, prevInter = run()
     else: 
-        if frame % 10 == 0 or prevInter: 
+        if frame % interval == 0 or prevInter: 
             hx, hy, vx, vy, unit, prevInter = run()
         else: 
             hx, hy, vx, vy = frameData['vanishing']
@@ -126,7 +128,7 @@ def pipeline(frame, image, low, high, frameData, prevInter=False, fast=False, sh
     return prevInter
 
 def main():
-    frameRange = range(850, 920)
+    frameRange = range(100, 200)
     frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
     prevInter = True 
 

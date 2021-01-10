@@ -3,7 +3,6 @@ import math
 import os 
 import copy 
 import json 
-import operator 
 
 import numpy as np 
 import itertools as it 

@@ -66,7 +66,7 @@ def template_match(image, unit, corners, identities, cornerLabels, homography):
     return identities, cornerLabels 
 
 def remove_identities(image, unit, identities, homography):
-    distance = 0.5*unit
+    distance = 2*unit
     newIdentities = dict()
     newCornerLabels = set()
 
