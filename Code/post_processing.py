@@ -91,19 +91,24 @@ def interpolate(rawImage, frame, frameData):
 
     return image, homography, vanishing, unit, identities
 
-def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData):
+def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData, interpolationData):
+    status = True 
     if sanity_check(identities): 
         try: 
             identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
             identities, cornerLabels = template_match(image, unit, corners, identities, cornerLabels, get_homography(identities))
             identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
             homography = get_homography(identities)
-            # meanDist, errorCount = image_error(identities, homography)
+            meanDist, errorCount = image_error(identities, homography)
+            print ('Mean Dist: {}, Error Count: {}'.format(meanDist, errorCount))
+            if meanDist >= 10 or errorCount >= 20: raise ValueError
         except: 
+            status = False
             image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
     else: 
+        status = False 
         image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
 
     homographyImage = warp_image(image, homography)
     
-    return homographyImage, image, vanishing, unit, identities, homography 
+    return homographyImage, image, vanishing, unit, identities, homography, status
