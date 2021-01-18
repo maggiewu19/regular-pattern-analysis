@@ -128,7 +128,7 @@ def pipeline(frame, image, low, high, frameData, interpolationData, useDeblur=Fa
     return useInter
 
 def main():
-    frameRange = range(210, 230)
+    frameRange = range(201, 202)
     frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
     prevInter = True 

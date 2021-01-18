@@ -24,12 +24,12 @@ def get_corner_info(corners, unit):
     # update feature vectors and neighbor info 
     featureVectors = dict()
     neighborInfo = dict()
-    distance = 1.5*unit 
-    minDifference = 0.5*unit 
+    distance = 1.8*unit 
+    minDifference = 0.25*unit 
     for x,y in corners: 
         featureVectors[(x,y)] = [0 for _ in range(8)]
         neighborInfo[(x,y)] = {'count': 0, 'coord': {index: None for index in range(8)}, 
-                            'dist': [minDifference for _ in range(8)]}
+                            'dist': [unit for _ in range(8)]}
 
         xRange = range(round(x-distance), round(x+distance))
         yRange = range(round(y-distance), round(y+distance))
@@ -67,8 +67,8 @@ def get_corner_matching(featureVectors, neighborInfo):
             cornerVector = extensionInfo[corner]
 
             length = len(extendedVector)
-            missCount = sum([1 if extendedVector[i] != cornerVector[i] else 0 for i in range(length)])
-            cornerMissCount = sum([1 if ((extendedVector[i] == '-' or cornerVector[i] == '-') and extendedVector[i] != cornerVector[i]) else 0 for i in range(length)])
+            missCount = int(sum([1 if extendedVector[i] != cornerVector[i] else 0 for i in range(length)]))
+            cornerMissCount = int(sum([1 if ((extendedVector[i] == '-' or cornerVector[i] == '-') and extendedVector[i] != cornerVector[i]) else 0 for i in range(length)])/8)
             matchCount = None 
             valid = (cornerMissCount <= 2) and (missCount <= (cornerMissCount+1)*8)
             if valid: 
@@ -104,7 +104,7 @@ def section_split(minMaxPosition, cornerMatching):
                         actualSection = sectionIndex+1 
                         break 
             
-            if (actualSection-expectedSection) <= 1: 
+            if abs(actualSection-expectedSection) <= 1: 
                 sectionList.append((corner, missCount, cornerMissCount, matchCount))
         
         cornerMatching[(x,y)] = sectionList 
