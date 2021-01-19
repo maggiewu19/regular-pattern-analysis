@@ -50,7 +50,7 @@ def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, 
 
     return image, mask, vanishing, unit, prevInter 
 
-def analyze_region(image, mask, unit, maxCorners=300, epsilon=1e-4, k=5e-2, block=5, maxCount=20):
+def analyze_region(image, mask, unit):
     '''
     Corner detection via Harris corner detector 
     Corner matching and regional pattern analysis 
@@ -128,7 +128,7 @@ def pipeline(frame, image, low, high, frameData, interpolationData, useDeblur=Fa
     return useInter
 
 def main():
-    frameRange = range(201, 202)
+    frameRange = range(200, 230)
     frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
     prevInter = True 
@@ -141,6 +141,6 @@ def main():
         if frame == frameRange[0]: 
             low, high = select_region(image)
 
-        prevInter = pipeline(frame, image, low, high, frameData, interpolationData, prevInter=prevInter, logging=False, fast=True)
+        prevInter = pipeline(frame, image, low, high, frameData, interpolationData, prevInter=prevInter, fast=True)
 
 main()

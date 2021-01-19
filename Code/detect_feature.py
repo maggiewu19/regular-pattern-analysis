@@ -1,7 +1,7 @@
 from directory import *
 from utility import *
 
-def corner_detection(image, mask, unit, maxCorners=300, epsilon=1e-4, k=5e-2, block=5):
+def corner_detection(image, mask, unit, maxCorners=180, epsilon=1e-4, k=5e-2, block=5):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape 
 

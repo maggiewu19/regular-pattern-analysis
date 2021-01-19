@@ -80,6 +80,41 @@ def remove_identities(image, unit, identities, homography):
 
     return newIdentities, newCornerLabels
 
+def alignment_check(image, unit, identities):
+    def check(array, index, identities):
+        for i in array: 
+            position = [entry[index] for entry in array[i]]
+            median = statistics.median(position) 
+            for entry in array[i]: 
+                if abs(entry[index] - median) > distance and entry in identities: 
+                    del identities[entry]
+        
+        return identities 
+
+    distance = 0.5*unit 
+    groundHorizontal = alignmentInfo['horizontal']
+    groundVertical = alignmentInfo['vertical']
+    horizontal = dict()
+    vertical = dict()
+
+    for x,y in identities: 
+        corner = identities[(x,y)] 
+        for row in groundHorizontal: 
+            if int(corner) in groundHorizontal[row]: 
+                horizontal[row] = horizontal.get(row, []) + [(x,y)]
+        for col in groundVertical: 
+            if int(corner) in groundVertical[col]: 
+                vertical[col] = vertical.get(col, []) + [(x,y)]
+
+    newIdentities = copy.deepcopy(identities)
+    newIdentities = check(vertical, 0, newIdentities)
+    newIdentities = check(horizontal, 1, newIdentities)
+
+    newCornerLabels = set(newIdentities.keys())
+    label_corners(image, identities, (0,0,0), cornerLabels=newCornerLabels, remove=True)
+
+    return newIdentities, newCornerLabels
+
 def interpolate(rawImage, frame, frameData):
     print ('frame {} used previous information'.format(frame))
     hx, hy, vx, vy = frameData['vanishing']
@@ -98,6 +133,7 @@ def image_transform(rawImage, image, frame, vanishing, unit, corners, identities
             identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
             identities, cornerLabels = template_match(image, unit, corners, identities, cornerLabels, get_homography(identities))
             identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
+            identities, cornerLabels = alignment_check(image, unit, identities)
             homography = get_homography(identities)
             meanDist, errorCount = image_error(identities, homography)
             print ('Mean Dist: {}, Error Count: {}'.format(meanDist, errorCount))
