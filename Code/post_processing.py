@@ -7,11 +7,11 @@ from find_homography import *
 def sanity_check(identities):
     return len(identities) > (1/4) * len(pixelInfo)
 
-def temporal_analysis(image, unit, corners, identities, cornerLabels, prevIdentities):
-    if len(prevIdentities) == 0: return identities, cornerLabels 
+def temporal_analysis(image, unit, corners, identities, prevIdentities):
+    if len(prevIdentities) == 0: return identities 
 
     homography = get_homography(prevIdentities, identities2=identities)
-    if not isinstance(homography, np.ndarray): return identities, cornerLabels 
+    if not isinstance(homography, np.ndarray): return identities 
     identityCorners = set(identities.values())
     distance = 0.5*unit 
 
@@ -32,11 +32,9 @@ def temporal_analysis(image, unit, corners, identities, cornerLabels, prevIdenti
             if matchX != None and matchY != None: 
                 identities[(matchX, matchY)] = corner 
 
-    cornerLabels = label_corners(image, identities, (150,0,150), cornerLabels=cornerLabels)
+    return identities 
 
-    return identities, cornerLabels 
-
-def template_match(image, unit, corners, identities, cornerLabels, homography):
+def template_match(image, unit, corners, identities, homography):
     identityCorners = set(identities.values())
     distance = 0.5*unit
 
@@ -58,14 +56,11 @@ def template_match(image, unit, corners, identities, cornerLabels, homography):
             if matchX != None and matchY != None: 
                 identities[(matchX, matchY)] = corner 
 
-    cornerLabels = label_corners(image, identities, (150,150,0), cornerLabels=cornerLabels)
-
-    return identities, cornerLabels 
+    return identities 
 
 def remove_identities(image, unit, identities, homography):
     distance = 2*unit
     newIdentities = dict()
-    newCornerLabels = set()
 
     for x,y in identities: 
         corner = identities[(x,y)]
@@ -74,11 +69,8 @@ def remove_identities(image, unit, identities, homography):
 
         if euclidean(imageX, imageY, x, y) <= distance: 
             newIdentities[(x,y)] = corner 
-            newCornerLabels.add((x,y))
-    
-    label_corners(image, identities, (0,0,0), cornerLabels=newCornerLabels, remove=True)
 
-    return newIdentities, newCornerLabels
+    return newIdentities
 
 def alignment_check(image, unit, identities):
     def check(array, index, identities):
@@ -106,14 +98,10 @@ def alignment_check(image, unit, identities):
             if int(corner) in groundVertical[col]: 
                 vertical[col] = vertical.get(col, []) + [(x,y)]
 
-    newIdentities = copy.deepcopy(identities)
-    newIdentities = check(vertical, 0, newIdentities)
-    newIdentities = check(horizontal, 1, newIdentities)
+    identities = check(vertical, 0, identities)
+    identities = check(horizontal, 1, identities)
 
-    newCornerLabels = set(newIdentities.keys())
-    label_corners(image, identities, (0,0,0), cornerLabels=newCornerLabels, remove=True)
-
-    return newIdentities, newCornerLabels
+    return identities
 
 def interpolate(rawImage, frame, frameData):
     print ('frame {} used previous information'.format(frame))
@@ -126,14 +114,15 @@ def interpolate(rawImage, frame, frameData):
 
     return image, homography, vanishing, unit, identities
 
-def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData, interpolationData):
+def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData):
     status = True 
     if sanity_check(identities): 
         try: 
-            identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
-            identities, cornerLabels = template_match(image, unit, corners, identities, cornerLabels, get_homography(identities))
-            identities, cornerLabels = remove_identities(image, unit, identities, get_homography(identities))
-            identities, cornerLabels = alignment_check(image, unit, identities)
+            identities = remove_identities(image, unit, identities, get_homography(identities))
+            identities = alignment_check(image, unit, identities)
+            identities = template_match(image, unit, corners, identities, get_homography(identities))
+            identities = remove_identities(image, unit, identities, get_homography(identities))
+            identities = alignment_check(image, unit, identities)
             homography = get_homography(identities)
             meanDist, errorCount = image_error(identities, homography)
             print ('Mean Dist: {}, Error Count: {}'.format(meanDist, errorCount))
@@ -144,7 +133,5 @@ def image_transform(rawImage, image, frame, vanishing, unit, corners, identities
     else: 
         status = False 
         image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
-
-    homographyImage = warp_image(image, homography)
     
-    return homographyImage, image, vanishing, unit, identities, homography, status
+    return image, vanishing, unit, identities, homography, status

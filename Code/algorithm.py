@@ -69,14 +69,17 @@ def analyze_region(image, mask, unit):
 
     identities, takenCorners = assign_identities(image, cornerMatching) 
     distance_check(unit, identities, takenCorners) 
-    cornerLabels = label_corners(image, identities, (0,0,255))
+    red = copy.deepcopy(identities)
     
-    identities, takenCorners, cornerLabels = iterative_extend(image, unit, neighborInfo, identities, takenCorners, cornerLabels)
-    identities, takenCorners, cornerLabels = iterative_extend(image, unit, neighborInfo, identities, takenCorners, cornerLabels, color=(255,0,0), minScore=1)
+    identities, takenCorners = iterative_extend(image, unit, neighborInfo, identities, takenCorners)
+    green = copy.deepcopy(identities)
+    
+    identities, takenCorners = iterative_extend(image, unit, neighborInfo, identities, takenCorners, minScore=1)
+    blue = copy.deepcopy(identities)
 
-    return image, corners, identities, cornerLabels 
+    return image, corners, identities, red, green, blue
 
-def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData, interpolationData):
+def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData):
     '''
     Perspective transformation via homography mapping 
 
@@ -84,8 +87,25 @@ def transform_update(rawImage, image, frame, vanishing, unit, corners, identitie
             identities (dict) 
     Output: image (np.array)
     '''
-    return image_transform(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData, interpolationData)
+    return image_transform(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData)
 
+def sequential_label(image, red, green, blue, purple, everything, fontScale=0.5):
+    def label(target, color, labelled):
+        for x,y in target: 
+            corner = target[(x,y)]
+            if (x,y) in everything and (x,y) not in labelled: 
+                labelled.add((x,y))
+                cv2.putText(image, str(corner), org=(x-3*len(str(corner)), y-3), fontFace=cv2.FONT_HERSHEY_PLAIN, color=color, fontScale=fontScale) 
+        return labelled 
+
+    labelled = label(red, (0,0,255), set())
+    labelled = label(green, (0,150,0), labelled)
+    labelled = label(blue, (255,0,0), labelled)
+    labelled = label(purple, (150,0,150), labelled)
+    labelled = label(everything, (150,150,0), labelled)
+
+    return image 
+    
 def log(frame, image, homographyImage, frameData, vanishing, unit, identities, homography, interpolationData, save, logging, show):
     frameData['vanishing'] = vanishing
     frameData['unit'] = unit 
@@ -110,12 +130,16 @@ def pipeline(frame, image, low, high, frameData, interpolationData, useDeblur=Fa
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
 
-    image, corners, identities, cornerLabels = analyze_region(image, mask, unit)
-    identities, cornerLabels = temporal_analysis(image, unit, corners, identities, cornerLabels, frameData['identities'])
+    image, corners, identities, red, green, blue = analyze_region(image, mask, unit)
+    identities = temporal_analysis(image, unit, corners, identities, frameData['identities'])
+    purple = copy.deepcopy(identities)
     analyze_time = time.time() 
     print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
 
-    homographyImage, image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, cornerLabels, frameData, interpolationData) 
+    image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData) 
+    everything = copy.deepcopy(identities)
+    image = sequential_label(image, red, green, blue, purple, everything)
+    homographyImage = warp_image(image, homography)
     homography_time = time.time()
     print ('Homography Time: {}'.format(homography_time-analyze_time))
 
@@ -128,7 +152,7 @@ def pipeline(frame, image, low, high, frameData, interpolationData, useDeblur=Fa
     return useInter
 
 def main():
-    frameRange = range(200, 230)
+    frameRange = range(230, 365)
     frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
     prevInter = True 

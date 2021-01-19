@@ -134,16 +134,6 @@ def identify_matches(neighborInfo, cornerMatching):
     
     return cornerMatching 
 
-def label_corners(image, identities, color, fontScale=0.5, cornerLabels=None, remove=False):
-    if cornerLabels == None: cornerLabels = set()
-    for x,y in identities: 
-        if (x,y) not in cornerLabels: 
-            corner = identities[(x,y)]
-            cv2.putText(image, str(corner), org=(x-3*len(str(corner)), y-3), fontFace=cv2.FONT_HERSHEY_PLAIN, color=color, fontScale=fontScale)
-            if not remove: cornerLabels.add((x,y))
-
-    return cornerLabels
-
 def assign_identities(image, cornerMatching):
     # assign corner identity 
     moreIdentities = False 
@@ -253,13 +243,12 @@ def distance_check(unit, identities, takenCorners, count=0, maxCount=10):
 
     return 
 
-def iterative_extend(image, unit, neighborInfo, identities, takenCorners, cornerLabels, color=(0,150,0), minScore=2, maxCount=20):
+def iterative_extend(image, unit, neighborInfo, identities, takenCorners, minScore=2, maxCount=20):
     moreIdentities = True 
     count = 0
     while moreIdentities and count < maxCount: 
         identities, takenCorners, moreIdentities = extend_identities(image, neighborInfo, identities, takenCorners, minScore=minScore)
         distance_check(unit, identities, takenCorners) 
-        cornerLabels = label_corners(image, identities, color, cornerLabels=cornerLabels)
         count += 1 
     
-    return identities, takenCorners, cornerLabels
+    return identities, takenCorners
