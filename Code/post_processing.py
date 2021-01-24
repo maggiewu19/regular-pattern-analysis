@@ -7,7 +7,10 @@ from find_homography import *
 def sanity_check(identities):
     return len(identities) > (1/4) * len(pixelInfo)
 
-def temporal_analysis(image, unit, corners, identities, prevIdentities):
+def temporal_analysis(image, frame, unit, corners, identities):
+    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
+    prevIdentities = prevData['identities']
+
     if len(prevIdentities) == 0: return identities 
 
     homography = get_homography(prevIdentities, identities2=identities)
@@ -103,18 +106,20 @@ def alignment_check(image, unit, identities):
 
     return identities
 
-def interpolate(rawImage, frame, frameData):
+def interpolate(rawImage, frame):
     print ('frame {} used previous information'.format(frame))
-    hx, hy, vx, vy = frameData['vanishing']
+    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
+
+    hx, hy, vx, vy = prevData['vanishing']
     vanishing = [hx, hy, vx, vy]
-    unit = frameData['unit']
+    unit = prevData['unit']
     identities = dict() 
-    homography = frameData['homography']
+    homography = prevData['homography']
     image = rectify(rawImage, hx, hy, vx, vy)
 
     return image, homography, vanishing, unit, identities
 
-def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData):
+def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData):
     status = True 
     if sanity_check(identities): 
         try: 
@@ -129,9 +134,9 @@ def image_transform(rawImage, image, frame, vanishing, unit, corners, identities
             if meanDist >= 10 or errorCount >= 20: raise ValueError
         except: 
             status = False
-            image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
+            image, homography, vanishing, unit, identities = interpolate(rawImage, frame)
     else: 
         status = False 
-        image, homography, vanishing, unit, identities = interpolate(rawImage, frame, frameData)
+        image, homography, vanishing, unit, identities = interpolate(rawImage, frame)
     
     return image, vanishing, unit, identities, homography, status

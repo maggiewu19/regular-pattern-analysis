@@ -2,4 +2,5 @@ Data/
 Maze_Info/
 Logging/
 Code/directory.py
+__pycache__
 .DS_Store

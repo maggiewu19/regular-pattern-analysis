@@ -8,7 +8,7 @@ from post_processing import *
 
 import time 
 
-def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, interval=5):
+def preprocess(image, frame, low, high, prevInter=False, fast=False, interval=5):
     '''
     Image rectification via hough transform 
     Unit estimation based on hough lines 
@@ -20,6 +20,8 @@ def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, 
             mask (np.array)
             unit (float)
     '''
+    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
+    
     def run():
         try: 
             lines, n = find_lines(image.astype(np.int16))
@@ -27,9 +29,9 @@ def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, 
             unit = find_unit(lines, n, hdismiss, vdismiss)
             prevInter = False 
         except: 
-            print ('frame {} requires interpolation'.format(frame))
-            hx, hy, vx, vy = frameData['vanishing']
-            unit = frameData['unit']
+            print ('frame {} requires rectification interpolation'.format(frame))
+            hx, hy, vx, vy = prevData['vanishing']
+            unit = prevData['unit']
             prevInter = True 
         
         return hx, hy, vx, vy, unit, prevInter 
@@ -40,8 +42,8 @@ def preprocess(image, frame, low, high, frameData, prevInter=False, fast=False, 
         if frame % interval == 0 or prevInter: 
             hx, hy, vx, vy, unit, prevInter = run()
         else: 
-            hx, hy, vx, vy = frameData['vanishing']
-            unit = frameData['unit']
+            hx, hy, vx, vy = prevData['vanishing']
+            unit = prevData['unit']
             prevInter = False 
 
     vanishing = [hx, hy, vx, vy]
@@ -79,7 +81,7 @@ def analyze_region(image, mask, unit):
 
     return image, corners, identities, red, green, blue
 
-def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData):
+def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData):
     '''
     Perspective transformation via homography mapping 
 
@@ -87,7 +89,7 @@ def transform_update(rawImage, image, frame, vanishing, unit, corners, identitie
             identities (dict) 
     Output: image (np.array)
     '''
-    return image_transform(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData)
+    return image_transform(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData)
 
 def sequential_label(image, red, green, blue, purple, everything, fontScale=0.5):
     def label(target, color, labelled):
@@ -106,7 +108,8 @@ def sequential_label(image, red, green, blue, purple, everything, fontScale=0.5)
 
     return image 
     
-def log(frame, image, homographyImage, frameData, vanishing, unit, identities, homography, interpolationData, save, logging, show):
+def log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save, logging, show):
+    frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
     frameData['vanishing'] = vanishing
     frameData['unit'] = unit 
     frameData['identities'] = identities 
@@ -122,21 +125,21 @@ def log(frame, image, homographyImage, frameData, vanishing, unit, identities, h
     if logging: save_pickle(ddst + '{}.pickle'.format(frame), frameData)
     if logging: save_pickle(idst + 'interpolation.pickle', interpolationData)
 
-def pipeline(frame, image, low, high, frameData, interpolationData, useDeblur=False, prevInter=False, fast=False, show=False, save=True, logging=True):
+def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevInter=False, fast=False, show=False, save=True, logging=True):
     rawImage = copy.deepcopy(image)
     start_time = time.time() 
     
-    image, mask, vanishing, unit, useInter = preprocess(image, frame, low, high, frameData, prevInter=prevInter, fast=fast)
+    image, mask, vanishing, unit, useInter = preprocess(image, frame, low, high, prevInter=prevInter, fast=fast)
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
 
     image, corners, identities, red, green, blue = analyze_region(image, mask, unit)
-    identities = temporal_analysis(image, unit, corners, identities, frameData['identities'])
+    identities = temporal_analysis(image, frame, unit, corners, identities)
     purple = copy.deepcopy(identities)
     analyze_time = time.time() 
     print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
 
-    image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, frameData, interpolationData) 
+    image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData) 
     everything = copy.deepcopy(identities)
     image = sequential_label(image, red, green, blue, purple, everything)
     homographyImage = warp_image(image, homography)
@@ -145,15 +148,14 @@ def pipeline(frame, image, low, high, frameData, interpolationData, useDeblur=Fa
 
     if not status and not useDeblur: 
         print ('deblur')
-        return pipeline(frame, deblur(rawImage), low, high, frameData, interpolationData, useDeblur=True, prevInter=prevInter, fast=fast, show=show, save=save, logging=logging)
+        return pipeline(frame, deblur(rawImage), low, high, interpolationData, useDeblur=True, prevInter=prevInter, fast=fast, show=show, save=save, logging=logging)
     else: 
-        log(frame, image, homographyImage, frameData, vanishing, unit, identities, homography, interpolationData, save=save, logging=logging, show=show)
+        log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save=save, logging=logging, show=show)
 
     return useInter
 
 def main():
-    frameRange = range(230, 365)
-    frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
+    frameRange = range(475, 900)
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
     prevInter = True 
 
@@ -165,6 +167,13 @@ def main():
         if frame == frameRange[0]: 
             low, high = select_region(image)
 
-        prevInter = pipeline(frame, image, low, high, frameData, interpolationData, prevInter=prevInter, fast=True)
+        try: 
+            prevInter = pipeline(frame, image, low, high, interpolationData, prevInter=prevInter, fast=True)
+        except: 
+            print ('error in pipeline')
+            image, homography, vanishing, unit, identities = interpolate(image, frame)
+            homographyImage = warp_image(image, homography)
+            log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, show=False, save=True, logging=True)
+            prevInter = True 
 
 main()
