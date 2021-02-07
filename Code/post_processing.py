@@ -9,7 +9,7 @@ def sanity_check(identities):
 
 def temporal_analysis(image, frame, unit, corners, identities):
     prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
-    prevIdentities = prevData['identities']
+    prevIdentities = prevData.get('identities', dict())
 
     if len(prevIdentities) == 0: return identities 
 
@@ -106,6 +106,19 @@ def alignment_check(image, unit, identities):
 
     return identities
 
+def group_check(identities, neighborInfo, minScore=2):
+    newIdentities = dict()
+    for x,y in identities: 
+        corner = identities[(x,y)]
+        actualNeighborsCount = sum([1 if c != '-' else 0 for c in cornerNeighborInfo[corner]])
+        correctNeighborsCount = sum([1 if c in identities and identities[c] in cornerNeighborInfo[corner] else 0 for _, c in neighborInfo[(x,y)]['coord'].items()])
+        if correctNeighborsCount >= min(minScore, 0.5*actualNeighborsCount): 
+            newIdentities[(x,y)] = corner 
+    
+    print ('Group Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
+
+    return newIdentities
+
 def interpolate(rawImage, frame):
     print ('frame {} used previous information'.format(frame))
     prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
@@ -119,19 +132,23 @@ def interpolate(rawImage, frame):
 
     return image, homography, vanishing, unit, identities
 
-def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData):
+def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData):
+    def filter_identity(image, unit, identities, neighborInfo):
+        identities = remove_identities(image, unit, identities, get_homography(identities))
+        identities = alignment_check(image, unit, identities)
+        identities = group_check(identities, neighborInfo)
+        return identities 
+    
     status = True 
     if sanity_check(identities): 
         try: 
-            identities = remove_identities(image, unit, identities, get_homography(identities))
-            identities = alignment_check(image, unit, identities)
+            identities = filter_identity(image, unit, identities, neighborInfo)
             identities = template_match(image, unit, corners, identities, get_homography(identities))
-            identities = remove_identities(image, unit, identities, get_homography(identities))
-            identities = alignment_check(image, unit, identities)
+            identities = filter_identity(image, unit, identities, neighborInfo)
             homography = get_homography(identities)
             meanDist, errorCount = image_error(identities, homography)
             print ('Mean Dist: {}, Error Count: {}'.format(meanDist, errorCount))
-            if meanDist >= 10 or errorCount >= 20: raise ValueError
+            if meanDist >= 10 or errorCount >= 20 or len(identities) <= 30: raise ValueError
         except: 
             status = False
             image, homography, vanishing, unit, identities = interpolate(rawImage, frame)

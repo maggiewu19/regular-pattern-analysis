@@ -79,9 +79,9 @@ def analyze_region(image, mask, unit):
     identities, takenCorners = iterative_extend(image, unit, neighborInfo, identities, takenCorners, minScore=1)
     blue = copy.deepcopy(identities)
 
-    return image, corners, identities, red, green, blue
+    return image, corners, identities, neighborInfo, red, green, blue
 
-def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData):
+def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData):
     '''
     Perspective transformation via homography mapping 
 
@@ -89,7 +89,7 @@ def transform_update(rawImage, image, frame, vanishing, unit, corners, identitie
             identities (dict) 
     Output: image (np.array)
     '''
-    return image_transform(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData)
+    return image_transform(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData)
 
 def sequential_label(image, red, green, blue, purple, everything, fontScale=0.5):
     def label(target, color, labelled):
@@ -133,13 +133,13 @@ def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevIn
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
 
-    image, corners, identities, red, green, blue = analyze_region(image, mask, unit)
+    image, corners, identities, neighborInfo, red, green, blue = analyze_region(image, mask, unit)
     identities = temporal_analysis(image, frame, unit, corners, identities)
     purple = copy.deepcopy(identities)
     analyze_time = time.time() 
     print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
 
-    image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, interpolationData) 
+    image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData) 
     everything = copy.deepcopy(identities)
     image = sequential_label(image, red, green, blue, purple, everything)
     homographyImage = warp_image(image, homography)
@@ -155,7 +155,7 @@ def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevIn
     return useInter
 
 def main():
-    frameRange = range(475, 900)
+    frameRange = range(330, 335)
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
     prevInter = True 
 
