@@ -94,9 +94,9 @@ def transform_update(rawImage, image, frame, vanishing, unit, corners, identitie
 def sequential_label(image, red, green, blue, purple, everything, fontScale=0.5):
     def label(target, color, labelled):
         for x,y in target: 
-            corner = target[(x,y)]
-            if (x,y) in everything and (x,y) not in labelled: 
+            if (x,y) in everything and (x,y) not in labelled and target[(x,y)] == everything[(x,y)]: 
                 labelled.add((x,y))
+                corner = everything[(x,y)]
                 cv2.putText(image, str(corner), org=(x-3*len(str(corner)), y-3), fontFace=cv2.FONT_HERSHEY_PLAIN, color=color, fontScale=fontScale) 
         return labelled 
 
@@ -145,17 +145,25 @@ def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevIn
     homographyImage = warp_image(image, homography)
     homography_time = time.time()
     print ('Homography Time: {}'.format(homography_time-analyze_time))
+    
+    save_np = []
+    corner_cor = [] 
+    for (x,y) in everything: 
+        save_np.append([x,y])
+        corner_cor.append(everything[(x,y)])
+    
+    np.save("corners.npy", np.array(save_np))
+    np.save("correspondence.npy", np.array(corner_cor))
 
     if not status and not useDeblur: 
         print ('deblur')
         return pipeline(frame, deblur(rawImage), low, high, interpolationData, useDeblur=True, prevInter=prevInter, fast=fast, show=show, save=save, logging=logging)
-    else: 
-        log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save=save, logging=logging, show=show)
-
+    
+    log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save=save, logging=logging, show=show)
     return useInter
 
 def main():
-    frameRange = range(330, 335)
+    frameRange = range(200, 201)
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
     prevInter = True 
 
@@ -173,7 +181,7 @@ def main():
             print ('error in pipeline')
             image, homography, vanishing, unit, identities = interpolate(image, frame)
             homographyImage = warp_image(image, homography)
-            log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, show=False, save=True, logging=True)
+            log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, show=False, save=False, logging=False)
             prevInter = True 
 
 main()

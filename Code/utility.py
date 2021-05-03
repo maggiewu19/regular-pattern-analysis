@@ -8,6 +8,7 @@ import statistics
 
 import numpy as np 
 import itertools as it 
+import matplotlib 
 import matplotlib.pyplot as plt 
 import sklearn.preprocessing as sp 
 import pickle as pkl 

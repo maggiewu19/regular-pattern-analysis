@@ -116,7 +116,35 @@ def group_check(identities, neighborInfo, minScore=2):
             newIdentities[(x,y)] = corner 
     
     print ('Group Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
+    return newIdentities
 
+def occlusion_check(identities, corners, unit):
+    def check_range(cRange):
+        return sum([1 if (nx,ny) in corners else 0 for nx,ny in cRange])
+
+    newIdentities = dict()
+    leftCorners = set(edgeCornerInfo['left'])
+    rightCorners = set(edgeCornerInfo['right'])
+    topCorners = set(edgeCornerInfo['top'])
+    bottomCorners = set(edgeCornerInfo['bottom'])
+    edgeCorners = leftCorners.union(rightCorners).union(topCorners).union(bottomCorners)
+
+    for x,y in identities: 
+        corner = identities[(x,y)]
+
+        if corner in edgeCorners: 
+            newIdentities[(x,y)] = corner
+            continue 
+        
+        left = it.product(range(int(x-10*unit), int(x-0.25*unit)), range(int(y-0.5*unit), int(y+0.5*unit)))
+        right = it.product(range(int(x+0.25*unit), int(x+10*unit)), range(int(y-0.5*unit), int(y+0.5*unit)))
+        top = it.product(range(int(x-0.5*unit), int(x+0.5*unit)), range(int(y-10*unit), int(y-0.25*unit)))
+        bottom = it.product(range(int(x-0.5*unit), int(x+0.5*unit)), range(int(y+0.25*unit), int(y+10*unit)))
+        
+        if min(check_range(right), check_range(left), check_range(top), check_range(bottom)) > 0: 
+            newIdentities[(x,y)] = corner
+
+    print ('Occlusion Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
     return newIdentities
 
 def interpolate(rawImage, frame):
@@ -145,6 +173,7 @@ def image_transform(rawImage, image, frame, vanishing, unit, corners, identities
             identities = filter_identity(image, unit, identities, neighborInfo)
             identities = template_match(image, unit, corners, identities, get_homography(identities))
             identities = filter_identity(image, unit, identities, neighborInfo)
+            identities = occlusion_check(identities, corners, unit)
             homography = get_homography(identities)
             meanDist, errorCount = image_error(identities, homography)
             print ('Mean Dist: {}, Error Count: {}'.format(meanDist, errorCount))
