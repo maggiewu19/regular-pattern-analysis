@@ -5,6 +5,7 @@ from create_mask import *
 from detect_feature import * 
 from find_homography import * 
 from post_processing import *
+from icp import * 
 
 import time 
 
@@ -52,7 +53,7 @@ def preprocess(image, frame, low, high, prevInter=False, fast=False, interval=5)
 
     return image, mask, vanishing, unit, prevInter 
 
-def analyze_region(image, mask, unit):
+def analyze_region(image, mask, unit, frame):
     '''
     Corner detection via Harris corner detector 
     Corner matching and regional pattern analysis 
@@ -64,6 +65,16 @@ def analyze_region(image, mask, unit):
             identities (dict) 
     '''
     corners, minMaxPosition = corner_detection(image, mask, unit)
+
+    ground = np.array(list(pixelInfo.values()))
+    icp_corners = []
+    for x,y in corners: 
+        icp_corners.append([x,y])
+
+    icp_corners = np.array(icp_corners)
+    homography = icp(icp_corners, ground)
+    cv2.imwrite(adst + '{}.jpg'.format(frame), warp_image(image, homography))
+
     featureVectors, neighborInfo = get_corner_info(corners, unit)
     cornerMatching = get_corner_matching(featureVectors, neighborInfo)
     cornerMatching = section_split(minMaxPosition, cornerMatching)
@@ -133,7 +144,7 @@ def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevIn
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
 
-    image, corners, identities, neighborInfo, red, green, blue = analyze_region(image, mask, unit)
+    image, corners, identities, neighborInfo, red, green, blue = analyze_region(image, mask, unit, frame)
     identities = temporal_analysis(image, frame, unit, corners, identities)
     purple = copy.deepcopy(identities)
     analyze_time = time.time() 

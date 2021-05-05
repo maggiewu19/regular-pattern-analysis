@@ -30,11 +30,10 @@ def create_bipartite(A, B):
 
 def best_match(bipartite, image, reference):
     rows, cols = linear_sum_assignment(bipartite) 
-    # print ('Matches', len(rows))
     order = np.argsort(bipartite[rows, cols])
     distances = bipartite[rows, cols].sum() / len(bipartite[rows, cols])
-    distances2 = bipartite[rows[order[:len(order-10)]], cols[order[:len(order-10)]]].sum() / len(bipartite[rows, cols])
-    print (distances, distances2)
+    # distances2 = bipartite[rows[order[:len(order-10)]], cols[order[:len(order-10)]]].sum() / len(bipartite[rows, cols])
+    # print (distances, distances2)
 
     return distances, image[rows, :], reference[cols, :]
 
@@ -53,7 +52,7 @@ def get_corners(corners, T, m=2):
 
     return output[:,0:m]
 
-def icp(A, B, img, frame, init_pose=None, max_iterations=20, tolerance=1e-4):
+def icp(A, B, init_pose=None, max_iterations=20, tolerance=1e-4):
     '''
     The Iterative Closest Point method: finds best-fit transform that maps points A on to points B
     Input:
@@ -84,7 +83,7 @@ def icp(A, B, img, frame, init_pose=None, max_iterations=20, tolerance=1e-4):
         T, distances = compute(src, dst)
         src = np.dot(T, src)
 
-    pt_color = np.array([0, 0, 0])
+    # pt_color = np.array([0, 0, 0])
     prev_error = 0
     for i in range(max_iterations):
         # find the nearest neighbors between the current source and destination points
@@ -94,17 +93,17 @@ def icp(A, B, img, frame, init_pose=None, max_iterations=20, tolerance=1e-4):
         homography, _ = cv2.findHomography(A, src[:m,:].T, method=cv2.LMEDS)
         intermediate = get_corners(A, homography)
 
-        cv2.imwrite(f'Sequence/Original/{i}.jpg', cv2.warpPerspective(frame, homography, (825, 1275)))
+        # cv2.imwrite(f'Sequence/Original/{i}.jpg', cv2.warpPerspective(frame, homography, (825, 1275)))
 
-        for x,y in intermediate: 
-            cv2.circle(img, (int(round(x)), int(round(y))), radius=3, thickness=3, color=pt_color.tolist())
+        # for x,y in intermediate: 
+        #     cv2.circle(img, (int(round(x)), int(round(y))), radius=3, thickness=3, color=pt_color.tolist())
 
         # print (distances)
         mean_error = np.mean(distances)
         if np.abs(prev_error - mean_error) < tolerance: break
 
         prev_error = mean_error
-        pt_color += np.array([10,10,10])
+        # pt_color += np.array([10,10,10])
 
     # calculate final transformation
     homography, _ = cv2.findHomography(A, src[:m,:].T, method=cv2.LMEDS)
@@ -135,26 +134,26 @@ def run_icp(corners, ground, img, frame):
 
 # original_corners = np.array(original_corners)
 
-corners = np.load("corners.npy")
-all_corners = np.load("200corners.npy")
-corresponding_corner = np.load("correspondence.npy")
-# ground = np.array([pixelInfo[corner] for corner in corresponding_corner])
-ground = np.array(list(pixelInfo.values()))
+# corners = np.load("corners.npy")
+# all_corners = np.load("200corners.npy")
+# corresponding_corner = np.load("correspondence.npy")
+# # ground = np.array([pixelInfo[corner] for corner in corresponding_corner])
+# ground = np.array(list(pixelInfo.values()))
 
-base = cv2.imread("Maze_info/orthogonal_view.png")
-icp_base = cv2.imread("Maze_info/orthogonal_view.png")
-frame = cv2.imread("Data/Lee/Corners/200.jpg")
+# base = cv2.imread("Maze_info/orthogonal_view.png")
+# icp_base = cv2.imread("Maze_info/orthogonal_view.png")
+# frame = cv2.imread("Data/Lee/Corners/200.jpg")
 
-# homography, _ = cv2.findHomography(corners, ground, method=cv2.LMEDS)
-output = run_icp(all_corners, ground, icp_base, frame)
+# # homography, _ = cv2.findHomography(corners, ground, method=cv2.LMEDS)
+# output = run_icp(all_corners, ground, icp_base, frame)
 
-# for x,y in output: 
-#     cv2.circle(icp_base, (int(round(x)), int(round(y))), radius=3, thickness=3, color=(0,0,0))
+# # for x,y in output: 
+# #     cv2.circle(icp_base, (int(round(x)), int(round(y))), radius=3, thickness=3, color=(0,0,0))
 
-# for x,y in corners: 
-#     new_x, new_y = transform_coord(x, y, homography)
-#     cv2.circle(base, (int(round(new_x)), int(round(new_y))), radius=3, thickness=3, color=(0,0,0))
+# # for x,y in corners: 
+# #     new_x, new_y = transform_coord(x, y, homography)
+# #     cv2.circle(base, (int(round(new_x)), int(round(new_y))), radius=3, thickness=3, color=(0,0,0))
 
-# cv2.imshow("base", base)
-cv2.imshow("icp base", icp_base)
-cv2.waitKey(0)
+# # cv2.imshow("base", base)
+# cv2.imshow("icp base", icp_base)
+# cv2.waitKey(0)
