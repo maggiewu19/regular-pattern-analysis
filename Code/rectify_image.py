@@ -461,19 +461,22 @@ def compute_matrices(hx, hy, vx, vy, height, width, camera_matrix):
 
     return inverse_matrix, rotation_matrix, dx, dy 
 
-def rectify(image, hx, hy, vx, vy): 
-    height, width, depth = image.shape
-    dim = (width, height)
+def compute_rectify_matrix(height, width, depth, hx, hy, vx, vy):
     inverse_matrix, rotation_matrix, dx, dy = compute_matrices(hx, hy, vx, vy, height, width, camera_matrix)
 
     correction = np.array([[1.0, 0.0, 0.0], [0.0, -1.0, height], [0.0, 0.0, 1.0]])
-    output = cv2.warpPerspective(image, correction, dim, flags=cv2.INTER_CUBIC+cv2.WARP_INVERSE_MAP)
-
     vector = np.array([[1.0, 0.0, dx], [0.0, -1.0, height-dy], [0.0, 0.0, 1.0]])
     perspective = np.dot(camera_matrix, np.dot(rotation_matrix, np.dot(inverse_matrix, vector)))
-    output = cv2.warpPerspective(output, perspective, dim, flags=cv2.INTER_CUBIC+cv2.WARP_INVERSE_MAP)
 
-    return output
+    homography = np.dot(np.linalg.inv(perspective), np.linalg.inv(correction))
+    return homography 
+
+def rectify(image, hx, hy, vx, vy): 
+    height, width, depth = image.shape
+    homography = compute_rectify_matrix(height, width, depth, hx, hy, vx, vy)
+    output = cv2.warpPerspective(image, homography, (width, height), flags=cv2.INTER_CUBIC)
+
+    return output, homography 
 
 def find_lines(image):
     height, width, depth = image.shape 

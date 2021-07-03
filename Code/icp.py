@@ -28,18 +28,21 @@ def create_bipartite(A, B):
     
     return np.array(bipartite), np.array(image), np.array(reference)
 
-def best_match(bipartite, image, reference):
+def best_match(bipartite, image, reference, ratio):
     rows, cols = linear_sum_assignment(bipartite) 
-    order = np.argsort(bipartite[rows, cols])
-    distances = bipartite[rows, cols].sum() / len(bipartite[rows, cols])
-    # distances2 = bipartite[rows[order[:len(order-10)]], cols[order[:len(order-10)]]].sum() / len(bipartite[rows, cols])
-    # print (distances, distances2)
+    cost = np.argsort(bipartite[rows, cols])
+    include = np.sort(cost)[int(ratio*len(cost))-1]
+    order = cost[cost <= include]
+    new_rows = rows[order]
+    new_cols = cols[order]
+    distances = bipartite[new_rows, new_cols].sum() / len(bipartite[new_rows, new_cols])
 
-    return distances, image[rows, :], reference[cols, :]
+    # return distances, image[rows, :], reference[cols, :]
+    return distances, image[new_rows, :], reference[new_cols, :]
 
-def compute(src, dst, m=2):
+def compute(src, dst, ratio=1, m=2):
     bipartite, image, reference = create_bipartite(src[:m,:].T, dst[:m,:].T)
-    distances, selected_image, selected_reference = best_match(bipartite, image, reference)
+    distances, selected_image, selected_reference = best_match(bipartite, image, reference, ratio)
     T, _ = cv2.findHomography(selected_image, selected_reference, method=cv2.LMEDS)
     
     return T, distances
@@ -52,7 +55,7 @@ def get_corners(corners, T, m=2):
 
     return output[:,0:m]
 
-def icp(A, B, init_pose=None, max_iterations=20, tolerance=1e-4):
+def icp(A, B, init_pose=None, max_iterations=20, tolerance=1e-2):
     '''
     The Iterative Closest Point method: finds best-fit transform that maps points A on to points B
     Input:
@@ -76,6 +79,8 @@ def icp(A, B, init_pose=None, max_iterations=20, tolerance=1e-4):
     src[:m,:] = np.copy(A.T)
     dst[:m,:] = np.copy(B.T)
 
+    optimal = {'best_dist': float('inf'), 'target': src}
+
     # apply the initial pose estimation
     if init_pose is not None:
         src = np.dot(init_pose, src)
@@ -89,6 +94,9 @@ def icp(A, B, init_pose=None, max_iterations=20, tolerance=1e-4):
         # find the nearest neighbors between the current source and destination points
         T, distances = compute(src, dst)
         src = np.dot(T, src)
+        if distances < optimal['best_dist']:
+            optimal['best_dist'] = distances 
+            optimal['target'] = copy.deepcopy(src)
 
         homography, _ = cv2.findHomography(A, src[:m,:].T, method=cv2.LMEDS)
         intermediate = get_corners(A, homography)
@@ -106,7 +114,7 @@ def icp(A, B, init_pose=None, max_iterations=20, tolerance=1e-4):
         # pt_color += np.array([10,10,10])
 
     # calculate final transformation
-    homography, _ = cv2.findHomography(A, src[:m,:].T, method=cv2.LMEDS)
+    homography, _ = cv2.findHomography(A, optimal['target'][:m,:].T, method=cv2.LMEDS)
 
     return homography
 

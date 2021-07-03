@@ -1,14 +1,16 @@
 from directory import *
+from conditions import *
 from deblur_image import *
 from rectify_image import *
 from create_mask import *
 from detect_feature import * 
 from find_homography import * 
 from post_processing import *
+from icp import * 
 
 import time 
 
-def preprocess(image, frame, low, high, prevInter=False, fast=False, interval=5):
+def preprocess(image, frame, low, high, prevData, prevInter=False, fast=False, interval=5):
     '''
     Image rectification via hough transform 
     Unit estimation based on hough lines 
@@ -20,39 +22,40 @@ def preprocess(image, frame, low, high, prevInter=False, fast=False, interval=5)
             mask (np.array)
             unit (float)
     '''
-    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
-    
-    def run():
+
+    def run(height, width, depth, homography, unit):
         try: 
             lines, n = find_lines(image.astype(np.int16))
-            hx, hy, vx, vy, hdismiss, vdismiss = find_vanishing(image, lines, n)
-            unit = find_unit(lines, n, hdismiss, vdismiss)
-            prevInter = False 
+            nhx, nhy, nvx, nvy, hdismiss, vdismiss = find_vanishing(image, lines, n)
+            nunit = find_unit(lines, n, hdismiss, vdismiss)
+            nhomography = compute_rectify_matrix(height, width, depth, nhx, nhy, nvx, nvy)
+
+            return nhomography, nunit, False 
         except: 
-            print ('frame {} requires rectification interpolation'.format(frame))
-            hx, hy, vx, vy = prevData['vanishing']
-            unit = prevData['unit']
-            prevInter = True 
-        
-        return hx, hy, vx, vy, unit, prevInter 
 
-    if not fast: 
-        hx, hy, vx, vy, unit, prevInter = run()
-    else: 
-        if frame % interval == 0 or prevInter: 
-            hx, hy, vx, vy, unit, prevInter = run()
-        else: 
-            hx, hy, vx, vy = prevData['vanishing']
-            unit = prevData['unit']
-            prevInter = False 
+            return homography, unit, True 
 
-    vanishing = [hx, hy, vx, vy]
-    image = rectify(image, hx, hy, vx, vy)
+    height, width, depth = image.shape
+    homography = prevData.get('rect-matrix', np.identity(3))
+    unit = prevData.get('unit', 0)
+    prevInter = True 
+
+    if prevInter or not frame % interval: 
+        homography, unit, prevInter = run(height, width, depth, homography)
+
+    image = cv2.warpPerspective(image, homography, (width, height), flags=cv2.INTER_CUBIC)
     mask = get_mask(image, low, high)
 
-    return image, mask, vanishing, unit, prevInter 
+    return image, mask, homography, unit, prevInter 
 
-def analyze_region(image, mask, unit):
+def compute_icp(image, corners, ground, prevData):
+    # ground = np.array(list(pixelInfo.values()))
+    corners = np.array([[x,y] for x,y in corners])
+    homography = icp(corners, ground, init_pose=prevData.get('homography', None))
+    # cv2.imwrite(adst + '{}-adapt.jpg'.format(frame), warp_image(image, homography))
+    return homography 
+
+def analyze_region(image, mask, unit, frame, prevData):
     '''
     Corner detection via Harris corner detector 
     Corner matching and regional pattern analysis 
@@ -64,6 +67,7 @@ def analyze_region(image, mask, unit):
             identities (dict) 
     '''
     corners, minMaxPosition = corner_detection(image, mask, unit)
+
     featureVectors, neighborInfo = get_corner_info(corners, unit)
     cornerMatching = get_corner_matching(featureVectors, neighborInfo)
     cornerMatching = section_split(minMaxPosition, cornerMatching)
@@ -108,9 +112,9 @@ def sequential_label(image, red, green, blue, purple, everything, fontScale=0.5)
 
     return image 
     
-def log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save, logging, show):
-    frameData = {'vanishing': None, 'unit': None, 'identities': dict(), 'homography': None}
-    frameData['vanishing'] = vanishing
+def log(frame, image, homographyImage, rect_matrix, unit, identities, homography, interpolationData, save, logging, show):
+    frameData = dict()
+    frameData['rect-matrix'] = rect_matrix
     frameData['unit'] = unit 
     frameData['identities'] = identities 
     frameData['homography'] = homography 
@@ -125,15 +129,28 @@ def log(frame, image, homographyImage, vanishing, unit, identities, homography, 
     if logging: save_pickle(ddst + '{}.pickle'.format(frame), frameData)
     if logging: save_pickle(idst + 'interpolation.pickle', interpolationData)
 
+def pipeline(frame, image, low, high, useICP=True):
+    rawImage = copy.deepcopy(image) 
+
+    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
+    image, mask, rect_matrix, unit, useInter = preprocess(image, frame, low, high, prevData, prevInter=prevInter, fast=fast)
+
+    if useICP: 
+        
+
+
+
 def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevInter=False, fast=False, show=False, save=True, logging=True):
     rawImage = copy.deepcopy(image)
     start_time = time.time() 
+
+    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
     
-    image, mask, vanishing, unit, useInter = preprocess(image, frame, low, high, prevInter=prevInter, fast=fast)
+    image, mask, vanishing, unit, useInter = preprocess(image, frame, low, high, prevData, prevInter=prevInter, fast=fast)
     preprocess_time = time.time() 
     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
 
-    image, corners, identities, neighborInfo, red, green, blue = analyze_region(image, mask, unit)
+    image, corners, identities, neighborInfo, red, green, blue = analyze_region(image, mask, unit, frame, prevData)
     identities = temporal_analysis(image, frame, unit, corners, identities)
     purple = copy.deepcopy(identities)
     analyze_time = time.time() 
@@ -145,15 +162,6 @@ def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevIn
     homographyImage = warp_image(image, homography)
     homography_time = time.time()
     print ('Homography Time: {}'.format(homography_time-analyze_time))
-    
-    save_np = []
-    corner_cor = [] 
-    for (x,y) in everything: 
-        save_np.append([x,y])
-        corner_cor.append(everything[(x,y)])
-    
-    np.save("corners.npy", np.array(save_np))
-    np.save("correspondence.npy", np.array(corner_cor))
 
     if not status and not useDeblur: 
         print ('deblur')
@@ -163,9 +171,9 @@ def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevIn
     return useInter
 
 def main():
-    frameRange = range(200, 201)
+    frameRange = range(200, 205)
     interpolationData = load_pickle(idst + 'interpolation.pickle', set())
-    prevInter = True 
+    prevInter = conditions['prevInter'] 
 
     for frame in frameRange:
         print (frame)
@@ -176,12 +184,12 @@ def main():
             low, high = select_region(image)
 
         try: 
-            prevInter = pipeline(frame, image, low, high, interpolationData, prevInter=prevInter, fast=True)
+            prevInter = pipeline(frame, image, low, high, interpolationData, prevInter=prevInter, fast=conditions['fast'], show=conditions['show'] , save=conditions['save'] , logging=conditions['logging'])
         except: 
             print ('error in pipeline')
             image, homography, vanishing, unit, identities = interpolate(image, frame)
             homographyImage = warp_image(image, homography)
-            log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, show=False, save=False, logging=False)
-            prevInter = True 
+            log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, show=conditions['show'] , save=conditions['save'] , logging=conditions['logging'])
+            prevInter = conditions['prevInter']  
 
 main()
