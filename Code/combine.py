@@ -48,14 +48,32 @@ def preprocess(image, frame, low, high, prevData, prevInter=False, fast=False, i
 
     return image, mask, homography, unit, prevInter 
 
-def compute_icp(image, corners, ground, prevData):
-    # ground = np.array(list(pixelInfo.values()))
-    corners = np.array([[x,y] for x,y in corners])
-    homography = icp(corners, ground, init_pose=prevData.get('homography', None))
-    # cv2.imwrite(adst + '{}-adapt.jpg'.format(frame), warp_image(image, homography))
+def bias_icp(corners, unit, ground, prevCorners, prevHomography):
+    biasCorners = []
+    for x,y in corners:
+        xRange = range(round(x-unit), round(x+unit))
+        yRange = range(round(y-unit), round(y+unit))
+        for nx,ny in it.product(xRange, yRange):
+            if (nx,ny) in prevCorners: 
+                biasCorners.append([x,y])
+                break 
+
+    homography = icp(biasCorners, ground, init_pose=prevHomography)
+    
     return homography 
 
-def analyze_region(image, mask, unit, frame, prevData):
+def compute_icp(corners, ground, prevHomography):
+    corners = np.array([[x,y] for x,y in corners])
+    homography = icp(corners, ground, init_pose=prevHomography)
+    return homography 
+
+def analyze_neighbor(featureVectors, neighborInfo, minMaxPosition):
+    cornerMatching = get_corner_matching(featureVectors, neighborInfo)
+    cornerMatching = section_split(minMaxPosition, cornerMatching)
+
+    return cornerMatching
+
+def analyze_region(image, unit, cornerMatching, neighborInfo):
     '''
     Corner detection via Harris corner detector 
     Corner matching and regional pattern analysis 
@@ -66,14 +84,8 @@ def analyze_region(image, mask, unit, frame, prevData):
     Output: image (np.array)
             identities (dict) 
     '''
-    corners, minMaxPosition = corner_detection(image, mask, unit)
-
-    featureVectors, neighborInfo = get_corner_info(corners, unit)
-    cornerMatching = get_corner_matching(featureVectors, neighborInfo)
-    cornerMatching = section_split(minMaxPosition, cornerMatching)
     cornerMatching = identify_matches(neighborInfo, cornerMatching)
-
-    identities, takenCorners = assign_identities(image, cornerMatching) 
+    identities, takenCorners = assign_identities(cornerMatching) 
     distance_check(unit, identities, takenCorners) 
     red = copy.deepcopy(identities)
     
@@ -83,7 +95,7 @@ def analyze_region(image, mask, unit, frame, prevData):
     identities, takenCorners = iterative_extend(image, unit, neighborInfo, identities, takenCorners, minScore=1)
     blue = copy.deepcopy(identities)
 
-    return image, corners, identities, neighborInfo, red, green, blue
+    return image, identities, red, green, blue
 
 def transform_update(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData):
     '''
@@ -129,46 +141,82 @@ def log(frame, image, homographyImage, rect_matrix, unit, identities, homography
     if logging: save_pickle(ddst + '{}.pickle'.format(frame), frameData)
     if logging: save_pickle(idst + 'interpolation.pickle', interpolationData)
 
-def pipeline(frame, image, low, high, useICP=True):
+def pipeline(frame, image, low, high, ground, imageUnit=48):
+    # load image and previous data 
     rawImage = copy.deepcopy(image) 
-
     prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
-    image, mask, rect_matrix, unit, useInter = preprocess(image, frame, low, high, prevData, prevInter=prevInter, fast=fast)
 
-    if useICP: 
+    # image rectification 
+    image, mask, rect_matrix, unit, useInter = preprocess(image, frame, low, high, prevData)
+
+    # corner detection 
+    corners, minMaxPosition = corner_detection(image, mask, unit)
+    featureVectors, neighborInfo = get_corner_info(corners, unit)
+
+    # run icp algorithms
+    if prevData: 
+        prevHomography = prevData.get('homography', None)
+        prevCorners = set(prevData.get('identities', dict()).keys())
+        ground = np.array(list(pixelInfo.values()))
+        if prevCorners: 
+            icpHomography = bias_icp(corners, unit, ground, prevCorners, prevHomography)
+        else: 
+            icpHomography = compute_icp(corners, ground, prevHomography)
         
+        pixelCorner = dict()
+        for pixel in pixelCornerInfo: 
+            x,y = pixel.split(',')
+            pixelCorner[(int(x), int(y))] = pixelCornerInfo[pixel]
 
-
-
-def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevInter=False, fast=False, show=False, save=True, logging=True):
-    rawImage = copy.deepcopy(image)
-    start_time = time.time() 
-
-    prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
+        icpIdentities = dict()
+        distance = 0.75*imageUnit
+        for x,y in corners: 
+            ix, iy = transform_coord(x, y, icpHomography)
+            xRange = range(round(ix-distance), round(ix+distance))
+            yRange = range(round(iy-distance), round(iy+distance))
+            for nx,ny in it.product(xRange, yRange):
+                if nx,ny in pixelCorner: 
+                    icpIdentities[(x,y)] = pixelCorner[(nx,ny)]
+        
+        cornerMatching = analyze_icp(icpIdentities, featureVectors, neighborInfo)
+    else: 
+        cornerMatching = analyze_neighbor(featureVectors, neighborInfo, minMaxPosition)
     
-    image, mask, vanishing, unit, useInter = preprocess(image, frame, low, high, prevData, prevInter=prevInter, fast=fast)
-    preprocess_time = time.time() 
-    print ('Preprocess Time: {}'.format(preprocess_time-start_time))
-
-    image, corners, identities, neighborInfo, red, green, blue = analyze_region(image, mask, unit, frame, prevData)
-    identities = temporal_analysis(image, frame, unit, corners, identities)
-    purple = copy.deepcopy(identities)
-    analyze_time = time.time() 
-    print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
-
-    image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData) 
-    everything = copy.deepcopy(identities)
-    image = sequential_label(image, red, green, blue, purple, everything)
-    homographyImage = warp_image(image, homography)
-    homography_time = time.time()
-    print ('Homography Time: {}'.format(homography_time-analyze_time))
-
-    if not status and not useDeblur: 
-        print ('deblur')
-        return pipeline(frame, deblur(rawImage), low, high, interpolationData, useDeblur=True, prevInter=prevInter, fast=fast, show=show, save=save, logging=logging)
+    image, identities, red, green, blue = analyze_region(image, unit, cornerMatching, neighborInfo)
     
-    log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save=save, logging=logging, show=show)
-    return useInter
+
+# def pipeline(frame, image, low, high, interpolationData, useDeblur=False, prevInter=False, fast=False, show=False, save=True, logging=True):
+#     rawImage = copy.deepcopy(image)
+#     start_time = time.time() 
+
+#     prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
+    
+#     image, mask, vanishing, unit, useInter = preprocess(image, frame, low, high, prevData, prevInter=prevInter, fast=fast)
+#     preprocess_time = time.time() 
+#     print ('Preprocess Time: {}'.format(preprocess_time-start_time))
+
+#     corners, minMaxPosition = corner_detection(image, mask, unit)
+#     featureVectors, neighborInfo = get_corner_info(corners, unit)
+#     cornerMatching = analyze_neighbor(featureVectors, neighborInfo, minMaxPosition)
+#     image, identities, red, green, blue = analyze_region(image, unit, cornerMatching, neighborInfo)
+#     identities = temporal_analysis(image, frame, unit, corners, identities)
+#     purple = copy.deepcopy(identities)
+#     analyze_time = time.time() 
+#     print ('Analyze Time: {}'.format(analyze_time-preprocess_time))
+
+#     image, vanishing, unit, identities, homography, status = transform_update(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData) 
+#     everything = copy.deepcopy(identities)
+#     image = sequential_label(image, red, green, blue, purple, everything)
+#     homographyImage = warp_image(image, homography)
+#     homography_time = time.time()
+#     print ('Homography Time: {}'.format(homography_time-analyze_time))
+
+#     if not status and not useDeblur: 
+#         print ('deblur')
+#         return pipeline(frame, deblur(rawImage), low, high, interpolationData, useDeblur=True, prevInter=prevInter, fast=fast, show=show, save=save, logging=logging)
+    
+#     log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, save=save, logging=logging, show=show)
+#     return useInter
 
 def main():
     frameRange = range(200, 205)

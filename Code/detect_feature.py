@@ -134,7 +134,7 @@ def identify_matches(neighborInfo, cornerMatching):
     
     return cornerMatching 
 
-def assign_identities(image, cornerMatching):
+def assign_identities(cornerMatching):
     # assign corner identity 
     moreIdentities = False 
     identities = dict()
@@ -252,3 +252,27 @@ def iterative_extend(image, unit, neighborInfo, identities, takenCorners, minSco
         count += 1 
     
     return identities, takenCorners
+
+def analyze_icp(icpIdentities, featureVectors, neighborInfo):
+    cornerMatching = dict()
+    for ix,iy in icpIdentities: 
+        neighbors = [neighborInfo[(ix,iy)]['coord'][index] for index in range(8)]
+        extendedVector = "" 
+        for neighbor in neighbors: 
+            featureVector = "".join(str(sequence) for sequence in featureVectors.get(neighbor, '--------')) + ' '
+            extendedVector += featureVector
+        extendedVector = extendedVector[:-1]
+
+        corner = icpIdentities[(ix,iy)]
+        cornerVector = extensionInfo[corner]
+
+        length = len(extendedVector)
+        missCount = int(sum([1 if extendedVector[i] != cornerVector[i] else 0 for i in range(length)]))
+        cornerMissCount = int(sum([1 if ((extendedVector[i] == '-' or cornerVector[i] == '-') and extendedVector[i] != cornerVector[i]) else 0 for i in range(length)])/8)
+        matchCount = None 
+        valid = (cornerMissCount <= 2) and (missCount <= (cornerMissCount+1)*8)
+        if valid: 
+            cornerMatching[(ix,iy)] = [(corner, missCount, cornerMissCount, matchCount)]
+    
+    return cornerMatching
+

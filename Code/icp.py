@@ -33,8 +33,7 @@ def best_match(bipartite, image, reference, ratio):
     cost = np.argsort(bipartite[rows, cols])
     include = np.sort(cost)[int(ratio*len(cost))-1]
     order = cost[cost <= include]
-    new_rows = rows[order]
-    new_cols = cols[order]
+    new_rows, new_cols = rows[order], cols[order]
     distances = bipartite[new_rows, new_cols].sum() / len(bipartite[new_rows, new_cols])
 
     # return distances, image[rows, :], reference[cols, :]
