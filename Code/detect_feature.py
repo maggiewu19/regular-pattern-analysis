@@ -123,7 +123,7 @@ def identify_matches(neighborInfo, cornerMatching):
                 if neighbor == None: continue 
 
                 expectedNeighbor = cornerNeighborInfo[corner][index]
-                for neighborCorner, _, _, _ in cornerMatching[neighbor]: 
+                for neighborCorner, _, _, _ in cornerMatching.get(neighbor, [(None, None, None, None)]): 
                     if expectedNeighbor == neighborCorner: 
                         matchCount += 1 
                         break 

@@ -115,7 +115,7 @@ def group_check(identities, neighborInfo, minScore=2):
         if correctNeighborsCount >= min(minScore, 0.5*actualNeighborsCount): 
             newIdentities[(x,y)] = corner 
     
-    print ('Group Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
+    # print ('Group Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
     return newIdentities
 
 def occlusion_check(identities, corners, unit):
@@ -144,23 +144,22 @@ def occlusion_check(identities, corners, unit):
         if min(check_range(right), check_range(left), check_range(top), check_range(bottom)) > 0: 
             newIdentities[(x,y)] = corner
 
-    print ('Occlusion Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
+    # print ('Occlusion Check: # identities = {}, # newIdentities = {}'.format(len(identities), len(newIdentities)))
     return newIdentities
 
 def interpolate(rawImage, frame):
-    print ('frame {} used previous information'.format(frame))
     prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
 
-    hx, hy, vx, vy = prevData['vanishing']
-    vanishing = [hx, hy, vx, vy]
+    rect_matrix = prevData['rect-matrix']
     unit = prevData['unit']
-    identities = dict() 
+    identities = prevData['identities']
     homography = prevData['homography']
-    image = rectify(rawImage, hx, hy, vx, vy)
+    height, width, depth = rawImage.shape
+    image = cv2.warpPerspective(rawImage, rect_matrix, (width, height), flags=cv2.INTER_CUBIC)
 
-    return image, homography, vanishing, unit, identities
+    return image, homography, rect_matrix, unit, identities
 
-def image_transform(rawImage, image, frame, vanishing, unit, corners, identities, neighborInfo, interpolationData):
+def image_transform(rawImage, image, frame, rect_matrix, unit, corners, identities, neighborInfo):
     def filter_identity(image, unit, identities, neighborInfo):
         identities = remove_identities(image, unit, identities, get_homography(identities))
         identities = alignment_check(image, unit, identities)
@@ -180,9 +179,9 @@ def image_transform(rawImage, image, frame, vanishing, unit, corners, identities
             if meanDist >= 10 or errorCount >= 20 or len(identities) <= 30: raise ValueError
         except: 
             status = False
-            image, homography, vanishing, unit, identities = interpolate(rawImage, frame)
+            image, homography, rect_matrix, unit, identities = interpolate(rawImage, frame)
     else: 
         status = False 
-        image, homography, vanishing, unit, identities = interpolate(rawImage, frame)
+        image, homography, rect_matrix, unit, identities = interpolate(rawImage, frame)
     
-    return image, vanishing, unit, identities, homography, status
+    return image, rect_matrix, unit, identities, homography, status
