@@ -175,8 +175,11 @@ def image_transform(rawImage, image, frame, rect_matrix, unit, corners, identiti
             identities = occlusion_check(identities, corners, unit)
             homography = get_homography(identities)
             meanDist, errorCount = image_error(identities, homography)
-            print ('Mean Dist: {}, Error Count: {}'.format(meanDist, errorCount))
-            if meanDist >= 10 or errorCount >= 20 or len(identities) <= 30: raise ValueError
+            errorStatus = f'Error Count = {errorCount}' if errorCount != 0 else ''
+            print (f'Frame {frame}: Mean Dist = {meanDist} ' + errorStatus)
+            if meanDist >= 10 or errorCount >= 20 or len(identities) <= 30: 
+                print ('False Status', meanDist, errorCount, len(identities))
+                raise ValueError
         except: 
             status = False
             image, homography, rect_matrix, unit, identities = interpolate(rawImage, frame)

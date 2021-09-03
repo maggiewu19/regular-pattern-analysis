@@ -28,8 +28,8 @@ def select_region(image):
         high = np.maximum(hsv[y][x], high)
         low = np.minimum(hsv[y][x], low)
 
-    low = np.maximum(np.array([0, 0, 0]), low-10)
-    high = np.minimum(np.array([255, 255, 255]), high+10)
+    low = np.maximum(np.array([0, 0, 0]), low)
+    high = np.minimum(np.array([255, 255, 255]), high)
 
     return low, high 
 

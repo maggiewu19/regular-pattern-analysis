@@ -10,7 +10,7 @@ from icp import *
 
 import time 
 
-def preprocess(image, frame, low, high, prevData, interval=5):
+def preprocess(image, frame, prevData, interval=5):
     '''
     Image rectification via hough transform 
     Unit estimation based on hough lines 
@@ -30,10 +30,8 @@ def preprocess(image, frame, low, high, prevData, interval=5):
             nunit = find_unit(lines, n, hdismiss, vdismiss)
             nhomography = compute_rectify_matrix(height, width, depth, nhx, nhy, nvx, nvy)
             exp_conditions['prevInter'] = False
-
             return nhomography, nunit 
         except: 
-
             exp_conditions['prevInter'] = True
             return homography, unit 
 
@@ -45,9 +43,8 @@ def preprocess(image, frame, low, high, prevData, interval=5):
         homography, unit = run(height, width, depth, homography, unit)
 
     image = cv2.warpPerspective(image, homography, (width, height), flags=cv2.INTER_CUBIC)
-    mask = get_mask(image, low, high)
 
-    return image, mask, homography, unit 
+    return image, homography, unit 
 
 def bias_icp(corners, unit, ground, prevCorners, prevHomography):
     biasCorners = []
@@ -80,7 +77,6 @@ def analyze_region(image, unit, cornerMatching, neighborInfo):
     Corner matching and regional pattern analysis 
 
     Input: image (np.array)
-            mask (np.array)
             unit (float)
     Output: image (np.array)
             identities (dict) 
@@ -141,19 +137,20 @@ def log(frame, image, homographyImage, rect_matrix, unit, identities, homography
     if save: cv2.imwrite(hdst + '{}.jpg'.format(frame), homographyImage)
     if logging: save_pickle(ddst + '{}.pickle'.format(frame), frameData)
 
-def pipeline(frame, image, low, high, ground, show, save, logging, imageUnit=48):
+def pipeline(frame, image, mask, ground, show, save, logging, imageUnit=48):
     # load image and previous data 
     rawImage = copy.deepcopy(image) 
     prevData = load_pickle(ddst + '{}.pickle'.format(frame-1), dict())
 
     # image rectification 
-    image, mask, rect_matrix, unit = preprocess(image, frame, low, high, prevData)
+    image, rect_matrix, unit = preprocess(image, frame, prevData)
 
     # corner detection 
     corners, minMaxPosition = corner_detection(image, mask, unit)
     featureVectors, neighborInfo = get_corner_info(corners, unit)
 
     # run icp algorithms
+    icpCornerMatching = dict()
     if prevData: 
         prevHomography = prevData.get('homography', None)
         prevCorners = set(prevData.get('identities', dict()).keys())
@@ -180,9 +177,41 @@ def pipeline(frame, image, low, high, ground, show, save, logging, imageUnit=48)
             if len(icpList) > 0: 
                 icpIdentities[(x,y)] = sorted(icpList, key=lambda x: x[1], reverse=True)[0][0]
 
-        cornerMatching = analyze_icp(icpIdentities, featureVectors, neighborInfo)
-    else: 
-        cornerMatching = analyze_neighbor(featureVectors, neighborInfo, minMaxPosition)
+        icpCornerMatching = analyze_icp(icpIdentities, featureVectors, neighborInfo)
+
+    neighborCornerMatching = analyze_neighbor(featureVectors, neighborInfo, minMaxPosition)
+
+    if icpCornerMatching:
+        cornerMatching = dict()
+        matches = set(icpCornerMatching.keys()).union(set(neighborCornerMatching.keys()))
+        for x,y in matches: 
+            if (x,y) in icpCornerMatching and (x,y) in neighborCornerMatching: 
+                icorner, imissCount, icornerMissCount, imatchCount = icpCornerMatching[(x,y)][0]
+                findMatch = False 
+                for ncorner, nmissCount, ncornerMissCount, nmatchCount in neighborCornerMatching[(x,y)]: 
+                    if icorner == ncorner: 
+                        if (imissCount-icornerMissCount*8) < (nmissCount-ncornerMissCount*8): 
+                            cornerMatching[(x,y)] = [(icorner, imissCount, icornerMissCount, imatchCount)]
+                        else: 
+                            cornerMatching[(x,y)] = [(ncorner, nmissCount, ncornerMissCount, nmatchCount)]
+                        findMatch = True 
+                        break 
+                if not findMatch: 
+                    bncorner, bnmissCount, bncornerMissCount, bnmatchCount = neighborCornerMatching[(x,y)][0]
+                    if (imissCount-icornerMissCount*8) < (bnmissCount-bncornerMissCount*8): 
+                        cornerMatching[(x,y)] = [(icorner, imissCount, icornerMissCount, imatchCount)]
+                    else: 
+                        cornerMatching[(x,y)] = [(bncorner, bnmissCount, bncornerMissCount, bnmatchCount)]
+            elif (x,y) in icpCornerMatching: 
+                cornerMatching[(x,y)] = icpCornerMatching[(x,y)]
+            elif (x,y) in neighborCornerMatching:
+                cornerMatching[(x,y)] = neighborCornerMatching[(x,y)]
+            else: 
+                pass 
+    else:
+        cornerMatching = neighborCornerMatching
+
+    # print (cornerMatching)
     
     image, identities, red, green, blue = analyze_region(image, unit, cornerMatching, neighborInfo)
     identities = temporal_analysis(image, frame, unit, corners, identities)
@@ -190,14 +219,16 @@ def pipeline(frame, image, low, high, ground, show, save, logging, imageUnit=48)
 
     image, rect_matrix, unit, identities, homography, status = transform_update(rawImage, image, frame, rect_matrix, unit, corners, identities, neighborInfo) 
     everything = copy.deepcopy(identities)
-    image = sequential_label(image, red, green, blue, purple, everything)
+    if status: image = sequential_label(image, red, green, blue, purple, everything)
     homographyImage = warp_image(image, homography)
+
+    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    plt.show()
     
-    log(frame, image, homographyImage, rect_matrix, unit, identities, homography, save=save, logging=logging, show=show)
+    # log(frame, image, homographyImage, rect_matrix, unit, identities, homography, save=save, logging=logging, show=show)
 
 def main():
-    frameRange = range(220, 225)
-    interpolationData = load_pickle(idst + 'interpolation.pickle', set())
+    frameRange = range(358, 359)
 
     for frame in frameRange: 
         fname = src + 'frame{}.png'.format(frame)
@@ -205,31 +236,26 @@ def main():
         ground = np.array(list(pixelInfo.values()))
 
         if frame == frameRange[0]: 
-            low, high = select_region(image)
+            brightLow, brightHigh = select_region(image)
+            brightMask = get_mask(image, brightLow, brightHigh)
+
+            shadowLow, shadowHigh = select_region(image)
+            shadowMask = get_mask(image, shadowLow, shadowHigh)
+
+        print ('mask number')
+        print (brightLow, brightHigh, shadowLow, shadowHigh)
+
+        mask = cv2.bitwise_or(brightMask, shadowMask)
+
+        cv2.imshow('mask', cv2.bitwise_and(image, image, mask=mask))
 
         try: 
-            pipeline(frame, image, low, high, ground, show=exp_conditions['show'] , save=exp_conditions['save'] , logging=exp_conditions['logging'])
+            pipeline(frame, image, mask, ground, show=exp_conditions['show'] , save=exp_conditions['save'] , logging=exp_conditions['logging'])
         except: 
+            print ('except pipeline')
             image, homography, rect_matrix, unit, identities = interpolate(image, frame)
             homographyImage = warp_image(image, homography)
-            log(frame, image, homographyImage, rect_matrix, unit, identities, homography, save=exp_conditions['save'], logging=exp_conditions['logging'], show=exp_conditions['show'])
+            # log(frame, image, homographyImage, rect_matrix, unit, identities, homography, save=exp_conditions['save'], logging=exp_conditions['logging'], show=exp_conditions['show'])
             exp_conditions['prevInter'] = True 
-
-    # for frame in frameRange:
-    #     print (frame)
-    #     fname = src + 'frame{}.png'.format(frame)
-    #     image = cv2.imread(fname)
-
-    #     if frame == frameRange[0]: 
-    #         low, high = select_region(image)
-
-    #     try: 
-    #         prevInter = pipeline(frame, image, low, high, interpolationData, prevInter=prevInter, fast=exp_conditions['fast'], show=exp_conditions['show'] , save=exp_conditions['save'] , logging=exp_conditions['logging'])
-    #     except: 
-    #         print ('error in pipeline')
-    #         image, homography, vanishing, unit, identities = interpolate(image, frame)
-    #         homographyImage = warp_image(image, homography)
-    #         log(frame, image, homographyImage, vanishing, unit, identities, homography, interpolationData, show=exp_conditions['show'] , save=exp_conditions['save'] , logging=exp_conditions['logging'])
-    #         prevInter = exp_conditions['prevInter']  
 
 main()
